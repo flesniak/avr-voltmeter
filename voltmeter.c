@@ -11,8 +11,8 @@
 #include <avr/sleep.h>
 #include <stdbool.h>
 
-const unsigned char plexdelay = 40; //~200Hz
-const unsigned short adcdelay = 800; //~5Hz=1562
+const unsigned char plexdelay = 32; //~200Hz
+const unsigned short adcdelay = 16; //~5Hz=1562; new style: 25*plexdelay=10Hz
 const unsigned short compareValues[2][3] = { {700, 70, 7},
 					     {1500, 150, 15} };
 bool lastbtnstate = 1;
@@ -34,15 +34,13 @@ unsigned char segmentCode[11] = { 0b11000000, //0
 ISR(TIM0_COMPA_vect) {
 	PORTB = 0b00000011; //disable all segments
 	switch( currentSegment ) {
-		case 2 : currentSegment = 0;
-			break;
-		/*case 3 : currentSegment++; //implement special actions for 4th "segment"/LEDs
+		case 3 : currentSegment++; //implement special actions for 4th "segment"/LEDs
 			DDRA |= 1;
-			PORTA = 0b11110001 | (1<<(ADMUX+2));
+			PORTA = 0b11110000 | (1<<((ADMUX&1)+2));
 			break;
 		case 4 : currentSegment = 0;
 			PORTA &= ~1;
-			DDRA &= ~1;*/
+			DDRA &= ~1;
 		default : PORTA = currentCode[currentSegment*2];
 			PORTB = ~(1 << currentSegment) & 3 | currentCode[currentSegment*2+1];
 			currentSegment++;
@@ -50,10 +48,7 @@ ISR(TIM0_COMPA_vect) {
 	TCNT0 = 0;
 }
 
-ISR(TIM1_COMPA_vect) {
-//void doadc() {
-	if( DDRA & 1 )
-		return;
+void doadc() {
 	TCCR0B = 0;
 	unsigned char decade, number;
 	DDRB &= ~(1<<PB2); //make PB2 input
@@ -84,7 +79,6 @@ ISR(TIM1_COMPA_vect) {
 	}
 
 	TCCR0B = 5;
-	TCNT1 = 0;
 }
 
 int main() {
@@ -96,16 +90,20 @@ int main() {
 	ADMUX = 0;
 
 	OCR0A = plexdelay; //set compare match value
-	OCR1A = adcdelay;
 	TIMSK0 = 2; //enable compare match interrupt
-	TIMSK1 = 2;
 	TCCR0B = 5; //set prescaler 1024
-	TCCR1B = 5;
 
 	sei();
 
-	while(1)
+	unsigned char wait = 0;
+	while(1) {
 		sleep_mode();
+		if( !(DDRA & 1) && wait > adcdelay ) {
+			doadc();
+			wait = 0;
+		} else
+			wait++;
+	}
 
 	return 0;
 }
