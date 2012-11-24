@@ -1,10 +1,9 @@
 /* Voltmeter mit ATtiny24a
  * Pinout:
- * PA0-PA1 - Messeingang 1+2
+ * PA0-PA1 - Messeingang 1+2, PA0 doppelbelegung leds4
  * PA2-PA7 - 7-Segment-Anzeige pin a-f (ACTIVE LOW!!!)
  * PB0-PB2 - 7-Segment-Anodentreiber
- * PB3 - 7-Segment-Anzeige pin g (ACTIVE LOW!!!)
- * TEMP: PB3 unbelegt, PB2 = 7-Segment g */
+ * PB3 - 7-Segment-Anzeige pin g (ACTIVE LOW!!!) & Button */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -32,7 +31,7 @@ unsigned char segmentCode[11] = { 0b11000000, //0
 				  0b11111111 }; //segment off
 
 ISR(TIM0_COMPA_vect) {
-	PORTB = 0b00000011; //disable all segments
+	PORTB = 0b00000111; //disable all segments
 	switch( currentSegment ) {
 		case 3 : currentSegment++; //implement special actions for 4th "segment"/LEDs
 			DDRA |= 1;
@@ -42,7 +41,7 @@ ISR(TIM0_COMPA_vect) {
 			PORTA &= ~1;
 			DDRA &= ~1;
 		default : PORTA = currentCode[currentSegment*2];
-			PORTB = ~(1 << currentSegment) & 3 | currentCode[currentSegment*2+1];
+			PORTB = ~(1 << currentSegment) & 7 | currentCode[currentSegment*2+1];
 			currentSegment++;
 	}
 	TCNT0 = 0;
@@ -51,22 +50,23 @@ ISR(TIM0_COMPA_vect) {
 void doadc() {
 	TCCR0B = 0;
 	unsigned char decade, number;
-	DDRB &= ~(1<<PB2); //make PB2 input
+	DDRB &= ~(1<<PB3); //make PB3 input
 	decade = PORTB; //use decade as savePortB
-	PORTB |= 1<<PB2;
-	ADCSRA |= 1<<ADSC; //start conversion
-	while( ADCSRA & (1<<ADSC) ); //wait for conversion to end
-	unsigned short adc = ADC;
+	PORTB = 1<<PB3;
+	ADCSRA |= 1<<ADSC; //start conversion, afterwards do button stuff because we're busy anyway
 
-	number = (PINB & (1<<PB2)) + lastbtnstate; //use number as button state tester
+	number = (PINB & (1<<PB3)) + lastbtnstate; //use number as button state tester
 	if( number == 1 ) {
 		ADMUX ^= 1; //toggle ADC channel
 		currentChannel = ADMUX & 1;
 		lastbtnstate = 0;
-	} else if( number == (1<<PB2) )
+	} else if( number == (1<<PB3) )
 		lastbtnstate = 1;
 	PORTB = decade;
-	DDRB |= 1<<PB2;
+	DDRB |= 1<<PB3;
+
+	while( ADCSRA & (1<<ADSC) ); //wait for conversion to end
+	unsigned short adc = ADC;
 
 	for(decade = 0; decade < 3; decade++) {
 		number = 0;
@@ -74,8 +74,10 @@ void doadc() {
 			number++;
 			adc -= compareValues[currentChannel][decade];
 		}
+		if( decade == 0 && number == 0 )
+			number=10;
 		currentCode[2*decade] = segmentCode[number] << 2;
-		currentCode[2*decade+1] = segmentCode[number] >> 6 << PB2; //get bit 6, move it to PB2 (segment g)
+		currentCode[2*decade+1] = segmentCode[number] >> 6 << PB3; //get bit 6, move it to PB3 (segment g)
 	}
 
 	TCCR0B = 5;
@@ -83,9 +85,9 @@ void doadc() {
 
 int main() {
 	DDRA = 0b11111100;
-	DDRB = 0b00000111;
-	PORTA = 0b00111111; //disable pullup on pa0+1, deactivate leds
-	PORTB = 0b00000111; //enable pullup on pb2, disable pb3
+	DDRB = 0b00001111;
+	PORTA = 0b11111100; //disable pullup on PA0+1, deactivate leds
+	PORTB = 0b00001111; //PB0-PB2 are multiplexer outputs, PB3 is for g segment
 	ADCSRA = 1<<ADEN;
 	ADMUX = 0;
 
