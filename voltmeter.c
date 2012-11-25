@@ -17,7 +17,7 @@ const unsigned short compareValues[2][3] = { {700, 70, 7},
 bool lastbtnstate = 1;
 unsigned char currentChannel = 0;
 unsigned char currentSegment = 0;
-unsigned char currentCode[6] = {0, 0, 0, 0, 0, 0};
+unsigned char currentCode[8] = {0, 0, 0, 0, 0, 0, 0xff, 0xff}; //dummy values for "4th" channel
 unsigned char segmentCode[11] = { 0b11000000, //0
 				  0b11111001, //1
 				  0b10100100, //2
@@ -100,7 +100,7 @@ int main() {
 	unsigned char wait = 0;
 	while(1) {
 		sleep_mode();
-		if( !(DDRA & 1) && wait > adcdelay ) {
+		if( (currentCode[2*currentSegment+1] & (6-PB3)) && !(DDRA & 1) && wait > adcdelay ) {
 			doadc();
 			wait = 0;
 		} else
