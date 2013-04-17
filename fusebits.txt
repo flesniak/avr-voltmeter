@@ -1,0 +1,7 @@
+hfuse
+orig 0xdf = 0b11011111
+new  0x5f = 0b01011111
+
+lfuse
+orig 0x62 = 0b01100010
+new  0xe2 = 0b11100010
